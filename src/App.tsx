@@ -5,13 +5,13 @@
 
 import React, { useRef, useState, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
-import { 
-  Palette, 
-  Eraser, 
-  RotateCcw, 
-  Download, 
-  Sparkles, 
-  Loader2, 
+import {
+  Palette,
+  Eraser,
+  RotateCcw,
+  Download,
+  Sparkles,
+  Loader2,
   Check,
   ChevronRight,
   Info,
@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { ChromePicker } from 'react-color';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -48,12 +49,16 @@ export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [color, setColor] = useState('#000000');
+  const [tool, setTool] = useState<'brush' | 'eraser'>('brush');
   const [brushSize, setBrushSize] = useState(10);
+  const [eraserSize, setEraserSize] = useState(20);
   const [isProcessing, setIsProcessing] = useState(false);
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [showInfo, setShowInfo] = useState(false);
   const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
   const [activeTab, setActiveTab] = useState<'draw' | 'result'>('draw');
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
 
   // Initialize canvas and check API key
   useEffect(() => {
@@ -122,9 +127,17 @@ export default function App() {
     // Scale coordinates if canvas internal size differs from CSS size
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    
-    ctx.lineWidth = brushSize;
-    ctx.strokeStyle = color;
+
+    // Set drawing mode based on tool
+    if (tool === 'eraser') {
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.lineWidth = eraserSize;
+    } else {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.lineWidth = brushSize;
+      ctx.strokeStyle = color;
+    }
+
     ctx.lineTo(x * scaleX, y * scaleY);
     ctx.stroke();
     ctx.beginPath();
@@ -212,6 +225,23 @@ export default function App() {
     link.download = 'my-cross-stitch.png';
     link.click();
   };
+
+  // Close color picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
+        setShowColorPicker(false);
+      }
+    };
+
+    if (showColorPicker) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showColorPicker]);
 
   return (
     <div className="min-h-screen bg-[#F5F2ED] text-[#1A1A1A] font-sans selection:bg-[#5A5A40] selection:text-white pb-20 lg:pb-0">
@@ -329,7 +359,10 @@ export default function App() {
                 onTouchStart={startDrawing}
                 onTouchMove={draw}
                 onTouchEnd={stopDrawing}
-                className="w-full aspect-square bg-white rounded-[32px] shadow-2xl border border-black/5 cursor-crosshair touch-none"
+                className={cn(
+                  "w-full aspect-square bg-white rounded-[32px] shadow-2xl border border-black/5 touch-none",
+                  tool === 'eraser' ? "cursor-cell" : "cursor-crosshair"
+                )}
               />
             </div>
 
@@ -340,12 +373,23 @@ export default function App() {
                   <span className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40]/60">Color Palette</span>
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40]/60">Custom</span>
-                    <input 
-                      type="color" 
-                      value={color}
-                      onChange={(e) => setColor(e.target.value)}
-                      className="w-6 h-6 rounded-md cursor-pointer border-none bg-transparent"
-                    />
+                    <div className="relative" ref={pickerRef}>
+                      <button
+                        onClick={() => setShowColorPicker(!showColorPicker)}
+                        className="w-6 h-6 rounded-md cursor-pointer border border-black/10 transition-transform hover:scale-110"
+                        style={{ backgroundColor: color }}
+                        aria-label="Choose custom color"
+                      />
+                      {showColorPicker && (
+                        <div className="absolute z-50 top-8 right-0">
+                          <ChromePicker
+                            color={color}
+                            onChange={(c) => setColor(c.hex)}
+                            disableAlpha={false}
+                          />
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="grid grid-cols-10 gap-2">
@@ -365,20 +409,67 @@ export default function App() {
 
               <div className="h-px bg-black/5" />
 
+              {/* Tool Selection */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40]/60">Tools</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setTool('brush')}
+                    className={cn(
+                      "py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-medium transition-all",
+                      tool === 'brush'
+                        ? "bg-[#5A5A40] text-white shadow-md"
+                        : "bg-white border border-black/10 text-[#5A5A40] hover:border-[#5A5A40]/30"
+                    )}
+                  >
+                    <Paintbrush size={16} /> Brush
+                  </button>
+                  <button
+                    onClick={() => setTool('eraser')}
+                    className={cn(
+                      "py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-medium transition-all",
+                      tool === 'eraser'
+                        ? "bg-[#5A5A40] text-white shadow-md"
+                        : "bg-white border border-black/10 text-[#5A5A40] hover:border-[#5A5A40]/30"
+                    )}
+                  >
+                    <Eraser size={16} /> Eraser
+                  </button>
+                </div>
+              </div>
+
+              <div className="h-px bg-black/5" />
+
+              {/* Size Control - Shows different slider based on active tool */}
               <div className="flex items-center gap-6">
                 <div className="flex-1 space-y-2">
                   <div className="flex justify-between">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40]/60">Brush Size</span>
-                    <span className="text-[10px] font-bold text-[#5A5A40]">{brushSize}px</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40]/60">
+                      {tool === 'brush' ? 'Brush Size' : 'Eraser Size'}
+                    </span>
+                    <span className="text-[10px] font-bold text-[#5A5A40]">
+                      {tool === 'brush' ? `${brushSize}px` : `${eraserSize}px`}
+                    </span>
                   </div>
-                  <input 
-                    type="range" 
-                    min="2" 
-                    max="60" 
-                    value={brushSize}
-                    onChange={(e) => setBrushSize(parseInt(e.target.value))}
-                    className="w-full accent-[#5A5A40]"
-                  />
+                  {tool === 'brush' ? (
+                    <input
+                      type="range"
+                      min="2"
+                      max="60"
+                      value={brushSize}
+                      onChange={(e) => setBrushSize(parseInt(e.target.value))}
+                      className="w-full accent-[#5A5A40]"
+                    />
+                  ) : (
+                    <input
+                      type="range"
+                      min="5"
+                      max="80"
+                      value={eraserSize}
+                      onChange={(e) => setEraserSize(parseInt(e.target.value))}
+                      className="w-full accent-[#5A5A40]"
+                    />
+                  )}
                 </div>
               </div>
             </div>
@@ -416,24 +507,14 @@ export default function App() {
               )}
             </div>
             
-            <div className="aspect-square bg-white rounded-[32px] shadow-2xl border border-black/5 overflow-hidden flex items-center justify-center relative group">
+            <div className="aspect-square bg-white rounded-[32px] shadow-2xl border border-black/5 overflow-hidden flex items-center justify-center relative">
               {resultImage ? (
-                <>
-                  <img 
-                    src={resultImage} 
-                    alt="Cross stitch result" 
-                    className="w-full h-full object-cover animate-in fade-in zoom-in-95 duration-700"
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <button 
-                      onClick={downloadResult}
-                      className="bg-white text-[#1A1A1A] px-6 py-3 rounded-xl font-medium flex items-center gap-2 hover:scale-105 transition-transform"
-                    >
-                      <Download size={18} /> Download Pattern
-                    </button>
-                  </div>
-                </>
+                <img
+                  src={resultImage}
+                  alt="Cross stitch result"
+                  className="w-full h-full object-cover animate-in fade-in zoom-in-95 duration-700"
+                  referrerPolicy="no-referrer"
+                />
               ) : (
                 <div className="text-center p-12 space-y-4">
                   <div className="w-20 h-20 bg-[#F5F2ED] rounded-full flex items-center justify-center mx-auto text-[#5A5A40]/30">
@@ -459,23 +540,12 @@ export default function App() {
             </div>
 
             {resultImage && (
-              <div className="p-6 bg-[#5A5A40]/5 rounded-3xl border border-[#5A5A40]/10 flex items-start gap-4">
-                <div className="w-8 h-8 bg-[#5A5A40] rounded-full flex items-center justify-center text-white shrink-0">
-                  <Check size={16} />
-                </div>
-                <div>
-                  <h3 className="font-medium text-sm">Transformation Complete</h3>
-                  <p className="text-xs text-[#5A5A40]/70 mt-1 leading-relaxed">
-                    The AI has successfully converted your drawing into a cross-stitch texture.
-                  </p>
-                  <button 
-                    onClick={downloadResult}
-                    className="mt-4 w-full py-3 bg-white border border-black/5 rounded-xl text-xs font-medium flex items-center justify-center gap-2 lg:hidden"
-                  >
-                    <Download size={14} /> Download Image
-                  </button>
-                </div>
-              </div>
+              <button
+                onClick={downloadResult}
+                className="w-full py-3 bg-[#5A5A40] text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2 hover:bg-[#5A5A40]/90 transition-colors"
+              >
+                <Download size={16} /> Download Image
+              </button>
             )}
           </div>
         </div>
